@@ -1,313 +1,120 @@
-# Retrieval Augmented Generation for Climate Challenges
+# RAG for Climate Challenges
 
-A Retrieval-Augmented Generation (RAG) application designed for HVAC mechanics to search and query technical documentation using AI.
+Search and query climate research documents using hybrid retrieval + LLM-generated answers with source citations.
 
-## Features
+## What it does
 
-- **Hybrid Search**: Combines vector similarity (semantic search) with BM25 (keyword search) using Reciprocal Rank Fusion
-- **Smart Chunking**: Processes PDFs with token-aware chunking (1000 tokens per chunk, 200 token overlap)
-- **Brand Filtering**: Filter results by equipment manufacturer
-- **Source Citations**: Always shows document name and page number for answers
-- **Safety-Aware**: LLM includes safety warnings where relevant
-- **Cloud Storage**: Uses ChromaDB cloud for scalable vector storage
+1. You feed it PDFs (climate reports, policy docs, technical papers)
+2. It chunks and indexes them in a local ChromaDB vector store
+3. You ask questions in a Streamlit UI
+4. It retrieves the best chunks using vector search + BM25, fuses the results, and generates a cited answer via Groq (Llama 3.3 70B)
 
-## Tech Stack
-
-- **PDF Processing**: PyMuPDF
-- **Embeddings**: all-MiniLM-L6-v2 via sentence-transformers
-- **Vector Database**: ChromaDB Cloud
-- **Keyword Search**: BM25 (rank-bm25)
-- **LLM**: Groq API (Llama 3 70B)
-- **UI**: Streamlit
-
-## Project Structure
+## Project structure
 
 ```
-.
-├── app.py              # Streamlit UI application
-├── ingest.py           # PDF ingestion and embedding pipeline
-├── retrieve.py         # Hybrid search and retrieval logic
-├── requirements.txt    # Python dependencies
-├── .env                # Environment variables (create this)
-├── .env.example        # Template for environment variables
-├── data/               # Place PDF files here for ingestion
-└── README.md           # This file
+├── app.py                 # Streamlit UI
+├── config.py              # Prompts, model settings, constants
+├── llm.py                 # Groq client + answer generation
+├── html_renderer.py       # HTML/CSS/JS for cited answers
+├── ingest.py              # PDF ingestion into ChromaDB
+├── retrieve.py            # Hybrid search (vector + BM25 + RRF)
+├── eval/
+│   ├── generate_test_set.py   # Generate golden Q&A test set via LLM
+│   ├── metrics.py             # Custom citation accuracy metrics
+│   ├── run_eval.py            # RAGAS + custom eval runner
+│   └── report.py              # Print/export eval results
+├── requirements.txt
+├── .env.example
+└── chroma_db/             # Local vector store (auto-generated)
 ```
 
-## Setup Instructions
+## Setup
 
-### 1. Prerequisites
-
-- Python 3.8 or higher
-- Groq API key ([get one here](https://console.groq.com/))
-- ChromaDB Cloud account ([sign up here](https://www.trychroma.com/))
-
-### 2. Installation
+**Requirements:** Python 3.8+, a [Groq API key](https://console.groq.com/)
 
 ```bash
-# Clone or download the repository
+# Clone
+git clone https://github.com/asaikiranb/RAG-climate.git
 cd RAG-climate
 
-# Create a virtual environment
+# Install
 python -m venv venv
-
-# Activate virtual environment
-# On macOS/Linux:
 source venv/bin/activate
-# On Windows:
-# venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Configure Environment Variables
-
-Create a `.env` file in the project root:
-
-```bash
+# Configure
 cp .env.example .env
+# Edit .env and paste your GROQ_API_KEY
 ```
 
-Edit `.env` and add your credentials:
+## Usage
 
-```env
-# Groq API Key
-GROQ_API_KEY=your_groq_api_key_here
+### 1. Ingest your PDFs
 
-# ChromaDB Cloud Configuration
-CHROMA_API_KEY=your_chroma_api_key_here
-CHROMA_HOST=your_chroma_host_here
-CHROMA_COLLECTION_NAME=hvac_documents
-```
-
-**How to get ChromaDB Cloud credentials:**
-1. Sign up at [trychroma.com](https://www.trychroma.com/)
-2. Create a new database
-3. Copy the API key and host URL
-4. Paste them into your `.env` file
-
-### 4. Add PDF Documents
-
-Place your HVAC technical manuals (PDF files) in the `data/` folder:
-
-```bash
-# Example structure:
-data/
-  ├── Carrier_ServiceManual.pdf
-  ├── Trane_TroubleshootingGuide.pdf
-  └── Lennox_InstallationManual.pdf
-```
-
-### 5. Ingest Documents
-
-Run the ingestion script to process PDFs and store them in ChromaDB:
+Put PDF files in a `data/` folder, then run:
 
 ```bash
 python ingest.py
 ```
 
-This will:
-- Extract text from all PDFs in the `data/` folder
-- Split text into 1000-token chunks with 200-token overlap
-- Generate embeddings using all-MiniLM-L6-v2
-- Store chunks with metadata (filename, page number) in ChromaDB Cloud
+This extracts text, chunks it (1000 tokens, 200 overlap), generates embeddings, and stores everything in local ChromaDB.
 
-**Note**: The first run will download the embedding model (~80MB).
-
-### 6. Run the Application
-
-Start the Streamlit app:
+### 2. Run the app
 
 ```bash
 streamlit run app.py
 ```
 
-The app will open in your browser at `http://localhost:8501`
+Opens at `http://localhost:8501`. Type a question or click one of the example queries.
 
-## Usage
+### 3. Run evals (optional)
 
-### Search Interface
-
-1. **Enter a Question**: Type your technical question in the search bar
-   - Example: "How do I diagnose a refrigerant leak?"
-
-2. **Filter by Brand** (Optional): Use the sidebar dropdown to filter results by manufacturer
-   - Helps narrow down results to specific equipment
-
-3. **Adjust Number of Sources**: Use the slider to control how many document chunks are retrieved (3-10)
-
-4. **View Results**:
-   - **Answer**: AI-generated response with source citations
-   - **Sources**: List of documents and page numbers used
-   - **Retrieved Context**: Expandable section showing the actual text chunks
-
-### Example Questions
-
-- "How do I troubleshoot a compressor failure?"
-- "What are the steps for refrigerant leak detection?"
-- "How to check capacitor functionality?"
-- "What safety precautions are needed when handling refrigerants?"
-- "How do I diagnose a frozen evaporator coil?"
-
-## How It Works
-
-### 1. Document Ingestion (`ingest.py`)
-
-```
-PDF Files → PyMuPDF → Text Extraction → Token-Based Chunking
-    ↓
-Sentence Transformer (all-MiniLM-L6-v2) → Embeddings
-    ↓
-ChromaDB Cloud Storage (with metadata)
-```
-
-### 2. Retrieval (`retrieve.py`)
-
-```
-User Query
-    ↓
-┌─────────────────┬─────────────────┐
-│  Vector Search  │   BM25 Search   │
-│   (Semantic)    │   (Keyword)     │
-└────────┬────────┴────────┬────────┘
-         │                 │
-         └────────┬────────┘
-                  ↓
-    Reciprocal Rank Fusion (RRF)
-                  ↓
-          Top 5 Chunks
-```
-
-**Reciprocal Rank Fusion** merges results using:
-```
-RRF(document) = Σ(1 / (k + rank))
-```
-where k=60 and rank is the position in each search method's results.
-
-### 3. Answer Generation (`app.py`)
-
-```
-Retrieved Chunks → Context Assembly
-    ↓
-Groq API (Llama 3 70B) + System Prompt
-    ↓
-Answer with Citations + Safety Warnings
-```
-
-## System Prompt
-
-The LLM uses this system prompt:
-
-> You are an HVAC technical assistant for AC mechanics. Answer using ONLY the provided context. Cite source document and page number. If the context doesn't have the answer, say so. Include safety warnings where relevant.
-
-## Testing Retrieval
-
-Test the retrieval system independently:
+Evaluate retrieval quality and answer accuracy:
 
 ```bash
-python retrieve.py
+# Generate a golden test set (LLM writes ground truth from your docs)
+python -m eval.generate_test_set
+
+# Run full evaluation (RAGAS metrics + citation accuracy)
+python -m eval.run_eval
+
+# View results
+python -m eval.report --markdown
 ```
 
-This will:
-- Show available brands in your collection
-- Run a sample query
-- Display search results with scores
+Eval metrics:
+- **RAGAS**: faithfulness, answer relevancy, context precision, context recall
+- **Custom**: citation validity, citation coverage, source grounding
+
+## How retrieval works
+
+```
+Query
+  ├── Vector search (semantic, via ChromaDB)
+  ├── BM25 search (keyword, via rank-bm25)
+  └── Reciprocal Rank Fusion (merges both)
+        → Top 5 chunks → LLM generates cited answer
+```
+
+## Configuration
+
+All settings live in `config.py`:
+- `LLM_MODEL` : which Groq model to use (default: `llama-3.3-70b-versatile`)
+- `LLM_TEMPERATURE`, `LLM_MAX_TOKENS` : generation params
+- `SYSTEM_PROMPT` : controls answer style and citation behavior
+- `EXAMPLE_QUERIES` : the example buttons shown in the UI
+
+Chunk size and overlap can be changed in `ingest.py` when calling `chunk_text()`.
+
+## Costs
+
+Groq free tier: 14,400 requests/day. No paid APIs required.
 
 ## Troubleshooting
 
-### "No PDF files found in ./data"
-- Make sure you've placed PDF files in the `data/` folder
-- Check that files have `.pdf` extension
-
-### "Could not connect to collection"
-- Verify your ChromaDB credentials in `.env`
-- Check that `CHROMA_HOST` and `CHROMA_API_KEY` are correct
-- Ensure you've run `ingest.py` to create the collection
-
-### "GROQ_API_KEY not found"
-- Make sure you've created the `.env` file
-- Verify the API key is correct
-- Check there are no extra spaces or quotes
-
-### Empty search results
-- Verify documents were ingested successfully (check `ingest.py` output)
-- Try broader search terms
-- Remove brand filter to search all documents
-
-### Model download issues
-- The first run downloads the embedding model (~80MB)
-- Ensure you have internet connection
-- Check disk space
-
-## Performance Tips
-
-1. **Batch Ingestion**: The ingestion script processes documents in batches of 100 chunks for efficiency
-
-2. **Caching**: The retriever caches the BM25 index to avoid reloading on every search
-
-3. **Chunk Size**: 1000 tokens balances context quality and retrieval precision
-   - Smaller chunks = more precise but may lose context
-   - Larger chunks = more context but less precise matching
-
-4. **Top-K Results**: Default is 5 chunks, increase for more comprehensive answers
-
-## Customization
-
-### Change Chunk Size
-
-Edit `ingest.py`:
-```python
-chunks = self.chunk_text(page_data['text'], chunk_size=1000, overlap=200)
-```
-
-### Change LLM Model
-
-Edit `app.py`:
-```python
-model="llama3-70b-8192",  # Change to other Groq models
-```
-
-### Modify System Prompt
-
-Edit the `SYSTEM_PROMPT` variable in `app.py` to change how the LLM responds.
-
-### Change Number of Retrieved Chunks
-
-Edit `retrieve.py` in `vector_search()` and `bm25_search()`:
-```python
-top_k=20  # Increase for more candidate chunks before RRF
-```
-
-## API Costs
-
-- **Groq**: Free tier includes 14,400 requests/day for Llama 3 70B
-- **ChromaDB Cloud**: Free tier includes 50k documents (check current limits)
-
-## Security Notes
-
-- Never commit your `.env` file to version control
-- Keep API keys confidential
-- The `.env` file is already in `.gitignore`
-
-## License
-
-This project is for educational and internal use. Ensure you have proper rights to the PDF documents you ingest.
-
-## Support
-
-For issues or questions:
-1. Check the troubleshooting section above
-2. Review error messages carefully
-3. Verify all credentials are correct
-4. Ensure documents are properly formatted PDFs
-
-## Future Enhancements
-
-Potential improvements:
-- [ ] Add conversation history for follow-up questions
-- [ ] Support for image extraction from PDFs
-- [ ] Multi-turn dialogue capabilities
-- [ ] Export answers to PDF reports
-- [ ] Admin panel for document management
-- [ ] User feedback and answer rating system
+| Problem | Fix |
+|---------|-----|
+| `GROQ_API_KEY not found` | Create `.env` file, paste your key |
+| `No PDF files found` | Put PDFs in `data/` folder |
+| `Could not connect to collection` | Run `python ingest.py` first |
+| Empty results | Try broader queries, check ingestion output |

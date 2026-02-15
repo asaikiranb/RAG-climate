@@ -32,21 +32,10 @@ class PDFIngestion:
             print(f"Created new collection: {self.collection_name}")
 
     def count_tokens(self, text: str) -> int:
-        """Count tokens in text using tiktoken."""
         return len(self.tokenizer.encode(text))
 
     def chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 200) -> List[str]:
-        """
-        Split text into chunks based on token count with overlap.
-
-        Args:
-            text: Input text to chunk
-            chunk_size: Maximum tokens per chunk
-            overlap: Number of overlapping tokens between chunks
-
-        Returns:
-            List of text chunks
-        """
+        """Split text into token-counted chunks with overlap."""
         tokens = self.tokenizer.encode(text)
         chunks = []
 
@@ -57,25 +46,15 @@ class PDFIngestion:
             chunk_text = self.tokenizer.decode(chunk_tokens)
             chunks.append(chunk_text)
 
-            # Move start position with overlap
             start = end - overlap
 
-            # Break if we're at the end
             if end >= len(tokens):
                 break
 
         return chunks
 
     def extract_text_from_pdf(self, pdf_path: str) -> List[Dict]:
-        """
-        Extract text from PDF with page numbers.
-
-        Args:
-            pdf_path: Path to PDF file
-
-        Returns:
-            List of dicts with text and metadata
-        """
+        """Extract text from each page of a PDF."""
         doc = fitz.open(pdf_path)
         pages_data = []
 
@@ -83,7 +62,7 @@ class PDFIngestion:
             page = doc[page_num]
             text = page.get_text()
 
-            if text.strip():  # Only process pages with text
+            if text.strip():
                 pages_data.append({
                     'text': text,
                     'page_number': page_num + 1,
@@ -94,15 +73,7 @@ class PDFIngestion:
         return pages_data
 
     def process_pdf(self, pdf_path: str) -> List[Dict]:
-        """
-        Process a single PDF: extract text, chunk it, and prepare for storage.
-
-        Args:
-            pdf_path: Path to PDF file
-
-        Returns:
-            List of chunks with metadata
-        """
+        """Extract text from a PDF, chunk it, return chunks with metadata."""
         print(f"Processing: {pdf_path}")
         pages_data = self.extract_text_from_pdf(pdf_path)
 
@@ -122,12 +93,7 @@ class PDFIngestion:
         return all_chunks
 
     def ingest_documents(self, data_folder: str = "./data"):
-        """
-        Ingest all PDFs from the data folder into ChromaDB.
-
-        Args:
-            data_folder: Path to folder containing PDF files
-        """
+        """Ingest all PDFs from data_folder into ChromaDB."""
         pdf_files = [f for f in os.listdir(data_folder) if f.endswith('.pdf')]
 
         if not pdf_files:
@@ -144,7 +110,7 @@ class PDFIngestion:
 
         print(f"\nTotal chunks to ingest: {len(all_chunks)}")
 
-        # Prepare data for ChromaDB
+
         texts = [chunk['text'] for chunk in all_chunks]
         metadatas = [
             {
@@ -156,11 +122,11 @@ class PDFIngestion:
         ]
         ids = [str(uuid.uuid4()) for _ in range(len(texts))]
 
-        # Generate embeddings
+
         print("Generating embeddings...")
         embeddings = self.embedding_model.encode(texts, show_progress_bar=True).tolist()
 
-        # Store in ChromaDB in batches
+
         batch_size = 100
         for i in range(0, len(texts), batch_size):
             end_idx = min(i + batch_size, len(texts))
@@ -177,13 +143,13 @@ class PDFIngestion:
         print(f"Collection: {self.collection_name}")
 
     def get_collection_stats(self):
-        """Print statistics about the collection."""
+        """Print collection stats."""
         count = self.collection.count()
         print(f"\nCollection Statistics:")
         print(f"  Name: {self.collection_name}")
         print(f"  Total chunks: {count}")
 
-        # Get unique filenames
+
         if count > 0:
             results = self.collection.get(limit=count)
             filenames = set(meta['filename'] for meta in results['metadatas'])
@@ -192,14 +158,13 @@ class PDFIngestion:
 
 
 def main():
-    """Main execution function."""
     print("=" * 60)
     print("HVAC RAG System - PDF Ingestion")
     print("=" * 60)
 
     ingestion = PDFIngestion()
 
-    # Check if collection already has data
+
     current_count = ingestion.collection.count()
     if current_count > 0:
         print(f"\nWarning: Collection already contains {current_count} chunks")
@@ -209,10 +174,10 @@ def main():
             ingestion.get_collection_stats()
             return
 
-    # Ingest documents
+
     ingestion.ingest_documents("./data")
 
-    # Show final stats
+
     ingestion.get_collection_stats()
 
 

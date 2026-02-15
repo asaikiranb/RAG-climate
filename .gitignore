@@ -50,3 +50,6 @@ hvac-rag/
 
 # ChromaDB local — committed for cloud deployment
 # chroma_db/
+
+# Eval results (generated)
+eval/results/
