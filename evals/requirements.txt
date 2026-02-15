@@ -1,0 +1,16 @@
+# Core dependencies (should already be installed with main project)
+numpy>=1.24.0
+loguru>=0.7.0
+pydantic>=2.0.0
+
+# Optional: For BLEU/ROUGE metrics
+nltk>=3.8.0
+rouge-score>=0.1.2
+
+# Optional: For RAGAS evaluation (requires OpenAI API)
+ragas>=0.1.0
+datasets>=2.14.0
+
+# Note: These are optional dependencies
+# Install with: pip install -r requirements.txt
+# Or selectively: pip install nltk rouge-score

@@ -4,23 +4,23 @@ import os
 import re
 import html as html_lib
 from dotenv import load_dotenv
-from groq import Groq
-from retrieve import HybridRetriever
+
+from src.config import get_settings
+from src.retrieval import HybridRetriever
+from src.generation import AnswerGenerator
 
 load_dotenv()
 
-# Page configuration — no sidebar
+# Page configuration
 st.set_page_config(
     page_title="RAG for Climate Challenges",
     layout="centered",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="auto"
 )
 
-# Hide sidebar completely + clean minimal styling
+# Clean minimal styling
 st.markdown("""
 <style>
-    [data-testid="stSidebar"] { display: none; }
-    [data-testid="collapsedControl"] { display: none; }
     .stApp { background-color: #ffffff; }
     .block-container {
         max-width: 720px;
@@ -76,8 +76,12 @@ Answer:"""
 
 
 @st.cache_resource
-def load_retriever():
-    return HybridRetriever()
+def load_system():
+    """Load settings, retriever, and generator."""
+    settings = get_settings()
+    retriever = HybridRetriever(settings)
+    generator = AnswerGenerator(settings)
+    return settings, retriever, generator
 
 
 def build_answer_html(answer_text, results):
@@ -88,14 +92,22 @@ def build_answer_html(answer_text, results):
     # Build source data
     sources = []
     for i, result in enumerate(results, 1):
-        meta = result['metadata']
-        display_name = meta['filename'].replace('.pdf', '').replace('_', ' ').replace('-', ' ')
+        meta = result.get('metadata', {})
+        # Handle both old and new metadata formats
+        filename = meta.get('filename', 'Unknown')
+        page_number = meta.get('page_number', '?')
+        score = meta.get('score', result.get('score', 0.0))
+
+        display_name = filename.replace('.pdf', '').replace('_', ' ').replace('-', ' ')
+        document_text = result.get('document', result.get('text', ''))
+
         sources.append({
             'num': i,
-            'filename': meta['filename'],
+            'filename': filename,
             'display_name': display_name,
-            'page': meta['page_number'],
-            'text': html_lib.escape(result['document'])
+            'page': page_number,
+            'score': score,
+            'text': html_lib.escape(document_text)
         })
 
     # Escape the answer text for HTML
@@ -379,51 +391,68 @@ def build_answer_html(answer_text, results):
     return full_html
 
 
-def generate_answer(query: str, context: str, groq_client: Groq) -> str:
-    prompt = SYSTEM_PROMPT.format(context=context, query=query)
-
+def generate_answer_simple(query: str, context_chunks: list, generator: AnswerGenerator) -> tuple:
+    """
+    Generate answer using new modular architecture.
+    Returns tuple of (answer_text, generated_answer_object).
+    """
     try:
-        chat_completion = groq_client.chat.completions.create(
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are a concise research assistant. Answer directly using inline [N] citations. Be brief and specific. No filler. No bold text."
-                },
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            model="llama-3.3-70b-versatile",
-            temperature=0.2,
-            max_tokens=800,
-            top_p=0.9,
+        generated = generator.generate(
+            query=query,
+            context_chunks=context_chunks,
+            enable_validation=st.session_state.get('enable_validation', False)
         )
-
-        return chat_completion.choices[0].message.content
-
+        return generated.answer, generated
     except Exception as e:
-        return f"Error generating answer: {str(e)}"
+        return f"Error generating answer: {str(e)}", None
 
 
 def main():
     st.title("Retrieval Augmented Generation for Climate Challenges")
     st.caption("Search across your document collection")
 
-    # Initialize Groq client
-    groq_api_key = os.getenv("GROQ_API_KEY")
-    if not groq_api_key:
-        st.error("GROQ_API_KEY not found. Please add it to your .env file.")
-        st.stop()
+    # Sidebar for advanced features
+    with st.sidebar:
+        st.header("Settings")
 
-    groq_client = Groq(api_key=groq_api_key)
+        enable_advanced = st.checkbox(
+            "Enable Advanced Features",
+            value=True,
+            help="Enable HyDE, query expansion, reranking, and other advanced retrieval features"
+        )
 
-    # Load retriever
+        show_metadata = st.checkbox(
+            "Show Retrieval Metadata",
+            value=False,
+            help="Display confidence scores and retrieval details"
+        )
+
+        enable_validation = st.checkbox(
+            "Enable Answer Validation",
+            value=False,
+            help="Validate citations and answer quality (slower but more accurate)"
+        )
+
+        st.session_state['enable_validation'] = enable_validation
+        st.session_state['show_metadata'] = show_metadata
+
+        st.divider()
+        st.caption("Using modular architecture with HybridRetriever and AnswerGenerator")
+
+    # Load system components
     try:
-        with st.spinner("Loading document index..."):
-            retriever = load_retriever()
+        with st.spinner("Loading system..."):
+            settings, retriever, generator = load_system()
+
+            # Update settings based on sidebar toggles
+            if not enable_advanced:
+                settings.retrieval.use_hyde = False
+                settings.retrieval.use_query_expansion = False
+                settings.retrieval.use_reranking = False
+                settings.retrieval.use_mmr = False
+
     except Exception as e:
-        st.error(f"Error connecting to ChromaDB: {str(e)}")
+        st.error(f"Error initializing system: {str(e)}")
         st.stop()
 
     # Read query from URL params (set by example buttons)
@@ -440,10 +469,11 @@ def main():
     if query:
         with st.spinner("Searching..."):
             try:
-                results = retriever.hybrid_search(
+                # Use new modular retriever
+                results = retriever.search(
                     query=query,
                     top_k=5,
-                    brand_filter=None
+                    return_metadata=True
                 )
             except Exception as e:
                 st.error(f"Search error: {str(e)}")
@@ -453,18 +483,27 @@ def main():
                 st.info("No relevant documents found. Try a different query.")
                 st.stop()
 
-            # Build context
-            context_parts = []
-            for i, result in enumerate(results, 1):
-                metadata = result['metadata']
-                context_parts.append(
-                    f"[Source {i}] (Document: {metadata['filename']}, Page: {metadata['page_number']})\n"
-                    f"{result['document']}\n"
-                )
-            context = "\n---\n".join(context_parts)
+            # Show metadata if enabled
+            if st.session_state.get('show_metadata', False):
+                with st.expander("Retrieval Metadata", expanded=False):
+                    if results and 'retrieval_metadata' in results[0]:
+                        meta = results[0]['retrieval_metadata']
+                        st.json(meta)
 
-            # Generate answer
-            answer = generate_answer(query, context, groq_client)
+            # Generate answer using new generator
+            answer, generated = generate_answer_simple(query, results, generator)
+
+        # Show confidence and validation scores if enabled
+        if st.session_state.get('show_metadata', False) and generated:
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Confidence", f"{generated.confidence_score:.2%}")
+            with col2:
+                if generated.citation_validation:
+                    st.metric("Citation Score", f"{generated.citation_validation.citation_score:.2%}")
+            with col3:
+                if generated.answer_verification:
+                    st.metric("Answer Quality", f"{generated.answer_verification.overall_score:.2%}")
 
         # Render answer with citations
         answer_html = build_answer_html(answer, results)

@@ -1,0 +1,91 @@
+{
+  "metadata": {
+    "name": "Example HVAC RAG Test Dataset",
+    "description": "Example test set with 10 questions for HVAC documentation",
+    "num_examples": 10,
+    "created": "2024-02-14",
+    "domain": "HVAC technical documentation"
+  },
+  "examples": [
+    {
+      "question": "What is the recommended temperature range for residential HVAC systems?",
+      "answer": "The recommended temperature range for residential HVAC systems is typically 68-72°F (20-22°C) for heating and 72-76°F (22-24°C) for cooling. This range provides optimal comfort while maintaining energy efficiency.",
+      "relevant_chunk_ids": ["chunk_001", "chunk_045"],
+      "question_type": "factual",
+      "difficulty": "easy",
+      "reference": "Residential HVAC systems should maintain temperatures between 68-76°F depending on the season for optimal comfort and efficiency."
+    },
+    {
+      "question": "How do you troubleshoot a HVAC system that is not cooling properly?",
+      "answer": "To troubleshoot a HVAC system not cooling properly: 1) Check the thermostat settings, 2) Inspect and replace dirty air filters, 3) Verify the outdoor unit is not blocked, 4) Check refrigerant levels, 5) Inspect the condenser coils for dirt/debris, 6) Verify the compressor is running, and 7) Check for duct leaks.",
+      "relevant_chunk_ids": ["chunk_112", "chunk_113", "chunk_114"],
+      "question_type": "how-to",
+      "difficulty": "medium",
+      "reference": "Troubleshooting steps include checking thermostat, filters, outdoor unit clearance, refrigerant, coils, compressor, and ductwork."
+    },
+    {
+      "question": "Why is regular HVAC maintenance important?",
+      "answer": "Regular HVAC maintenance is important because it: 1) Improves energy efficiency by up to 15-20%, 2) Extends equipment lifespan by preventing premature failures, 3) Maintains indoor air quality by keeping filters and coils clean, 4) Prevents costly breakdowns through early detection of issues, 5) Ensures warranty compliance, and 6) Maintains consistent comfort levels.",
+      "relevant_chunk_ids": ["chunk_078", "chunk_079"],
+      "question_type": "why",
+      "difficulty": "easy",
+      "reference": "Regular maintenance improves efficiency, extends lifespan, maintains air quality, prevents breakdowns, ensures warranty compliance, and maintains comfort."
+    },
+    {
+      "question": "What are the differences between a heat pump and a traditional furnace?",
+      "answer": "Heat pumps and traditional furnaces differ in several ways: 1) Heat pumps transfer heat rather than generate it, making them more efficient in moderate climates, 2) Furnaces burn fuel (gas/oil) to generate heat, while heat pumps use electricity to move heat, 3) Heat pumps can both heat and cool, while furnaces only heat, 4) Furnaces are more effective in very cold climates, 5) Heat pumps have lower operating costs but higher upfront costs, and 6) Heat pumps are more environmentally friendly.",
+      "relevant_chunk_ids": ["chunk_156", "chunk_157", "chunk_158"],
+      "question_type": "comparison",
+      "difficulty": "medium",
+      "reference": "Heat pumps transfer heat using electricity and can heat/cool, while furnaces burn fuel to generate heat only. Heat pumps are more efficient in moderate climates."
+    },
+    {
+      "question": "What is the SEER rating and why does it matter?",
+      "answer": "SEER (Seasonal Energy Efficiency Ratio) is a rating that measures the cooling efficiency of air conditioners and heat pumps. It represents the total cooling output during a typical cooling season divided by the total energy input. Higher SEER ratings indicate better efficiency. Modern systems must have a minimum SEER of 13-14, while high-efficiency units can reach SEER 20+. A higher SEER rating matters because it leads to lower energy bills, reduced environmental impact, and may qualify for rebates.",
+      "relevant_chunk_ids": ["chunk_089", "chunk_090"],
+      "question_type": "factual",
+      "difficulty": "medium",
+      "reference": "SEER measures cooling efficiency - higher ratings mean better efficiency, lower energy costs, and reduced environmental impact. Minimum is 13-14, high-efficiency is 20+."
+    },
+    {
+      "question": "How do you calculate the required BTU capacity for a room?",
+      "answer": "To calculate BTU capacity: 1) Measure the room's square footage (length × width), 2) Multiply square footage by 20 BTU for basic calculation, 3) Add 600 BTU per person if more than 2 people occupy the room regularly, 4) Add 4,000 BTU if the room has a kitchen, 5) Increase by 10% if the room is very sunny, decrease by 10% if heavily shaded, 6) For ceiling height over 8 feet, multiply the result by (ceiling height / 8). Example: 200 sq ft × 20 BTU = 4,000 BTU base capacity.",
+      "relevant_chunk_ids": ["chunk_201", "chunk_202"],
+      "question_type": "calculation",
+      "difficulty": "hard",
+      "reference": "Multiply room square footage by 20 BTU, then adjust for occupancy (+600 per person), kitchen (+4000), sun exposure (±10%), and ceiling height."
+    },
+    {
+      "question": "What are the main components of a central air conditioning system?",
+      "answer": "The main components of a central air conditioning system are: 1) Compressor - compresses refrigerant and pumps it through the system, 2) Condenser coil - located in the outdoor unit, releases heat to the outside, 3) Evaporator coil - located in the indoor unit, absorbs heat from indoor air, 4) Air handler/Blower - circulates air through the ductwork, 5) Refrigerant lines - carry refrigerant between indoor and outdoor units, 6) Thermostat - controls system operation, 7) Air filter - removes particulates from air, and 8) Ductwork - distributes conditioned air throughout the building.",
+      "relevant_chunk_ids": ["chunk_023", "chunk_024", "chunk_025"],
+      "question_type": "factual",
+      "difficulty": "easy",
+      "reference": "Main components: compressor, condenser coil, evaporator coil, air handler, refrigerant lines, thermostat, air filter, and ductwork."
+    },
+    {
+      "question": "How often should HVAC filters be changed and why?",
+      "answer": "HVAC filter change frequency depends on several factors: 1) Standard 1-inch filters should be changed every 1-3 months, 2) 4-inch pleated filters can last 6-9 months, 3) Change more frequently (monthly) if you have pets, allergies, or live in dusty areas, 4) During heavy use seasons (summer/winter), change more often. Regular filter changes are important because they: maintain airflow efficiency, prevent system strain, improve indoor air quality, reduce energy costs, and prevent premature equipment failure.",
+      "relevant_chunk_ids": ["chunk_067", "chunk_068"],
+      "question_type": "how-to",
+      "difficulty": "easy",
+      "reference": "Standard filters: 1-3 months, thick filters: 6-9 months, more often with pets/allergies. Regular changes maintain efficiency, air quality, and prevent equipment damage."
+    },
+    {
+      "question": "What causes HVAC systems to freeze up and how can it be prevented?",
+      "answer": "HVAC systems freeze up due to several reasons: 1) Restricted airflow from dirty filters or blocked vents, 2) Low refrigerant levels from leaks, 3) Dirty evaporator coils preventing heat absorption, 4) Malfunctioning blower fan, 5) Running the AC when outside temperature is below 60°F, 6) Closed or blocked return air vents. Prevention methods include: regularly changing filters, scheduling annual maintenance, keeping vents clear and open, maintaining adequate refrigerant levels, cleaning coils, and not running AC in cold weather.",
+      "relevant_chunk_ids": ["chunk_145", "chunk_146", "chunk_147"],
+      "question_type": "why",
+      "difficulty": "hard",
+      "reference": "Causes: restricted airflow, low refrigerant, dirty coils, fan issues, cold weather operation. Prevent through regular maintenance, filter changes, clear vents, and proper operation."
+    },
+    {
+      "question": "Compare the advantages and disadvantages of ductless mini-split systems versus central HVAC systems.",
+      "answer": "Ductless Mini-Split Advantages: 1) No ductwork needed (ideal for retrofits), 2) Zone-based control for better efficiency, 3) Easier installation, 4) Better for room additions, 5) No duct energy losses (30% savings potential). Disadvantages: 1) Higher upfront cost per unit, 2) Indoor units visible on walls, 3) Requires multiple units for whole-home coverage. Central HVAC Advantages: 1) Lower cost for whole-home coverage, 2) Units hidden in basement/attic, 3) Better for new construction, 4) Can integrate with whole-home air filtration. Disadvantages: 1) Requires ductwork installation, 2) Duct losses reduce efficiency, 3) Less flexible zoning, 4) Difficult to retrofit.",
+      "relevant_chunk_ids": ["chunk_189", "chunk_190", "chunk_191", "chunk_192"],
+      "question_type": "comparison",
+      "difficulty": "hard",
+      "reference": "Mini-splits: no ducts, zoned control, easier retrofit, but higher per-unit cost and visible. Central: lower whole-home cost, hidden units, but needs ducts and less efficient."
+    }
+  ]
+}
