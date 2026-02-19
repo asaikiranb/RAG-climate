@@ -2,8 +2,10 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from retrieve import HybridRetriever
+from rerank import load_reranker
 from llm import get_groq_client, build_context, generate_answer
 from html_renderer import build_answer_html
+from query import expand_query
 from config import EXAMPLE_QUERIES
 import voice
 
@@ -66,6 +68,11 @@ def load_retriever():
 @st.cache_resource
 def load_whisper_model():
     return voice.load_model()
+
+
+@st.cache_resource
+def load_reranker_model():
+    return load_reranker()
 
 
 def _init_voice_state():
@@ -142,25 +149,37 @@ def _render_voice_recorder(whisper_model):
     return query
 
 
-def _render_answer(query, retriever, groq_client):
-    """Run retrieval and generation, then render the answer."""
+def _render_answer(query, retriever, groq_client, reranker):
+    """Expand query, retrieve, rerank, generate, and render the answer."""
     with st.spinner("Searching..."):
         try:
-            results = retriever.hybrid_search(query=query, top_k=5, brand_filter=None)
+            queries = expand_query(query, groq_client)
+            all_results = []
+            seen_ids = set()
+            for q in queries:
+                for result in retriever.hybrid_search(q, reranker=reranker):
+                    if result["id"] not in seen_ids:
+                        seen_ids.add(result["id"])
+                        all_results.append(result)
         except Exception as e:
             st.error(f"Search error: {str(e)}")
             st.stop()
 
-        if not results:
+        if not all_results:
             st.info("No relevant documents found. Try a different query.")
             st.stop()
 
-        context = build_context(results)
+        # Re-rank the merged multi-query results and take the top 5
+        from rerank import rerank as rerank_results
+        from config import RETRIEVAL_TOP_K
+        final_results = rerank_results(query, all_results, reranker)[:RETRIEVAL_TOP_K]
+
+        context = build_context(final_results)
         answer = generate_answer(query, context, groq_client)
 
-    answer_html = build_answer_html(answer, results)
+    answer_html = build_answer_html(answer, final_results)
     answer_lines = answer.count("\n") + 1
-    estimated_height = 350 + (answer_lines * 22) + (len(results) * 55)
+    estimated_height = 350 + (answer_lines * 22) + (len(final_results) * 55)
     estimated_height = min(max(estimated_height, 450), 1800)
     components.html(answer_html, height=estimated_height, scrolling=True)
 
@@ -194,11 +213,16 @@ def main():
         st.error(f"Error connecting to ChromaDB: {str(e)}")
         st.stop()
 
-    with st.spinner("Loading voice model..."):
+    with st.spinner("Loading models..."):
         try:
             whisper_model = load_whisper_model()
         except Exception:
             whisper_model = None
+
+        try:
+            reranker = load_reranker_model()
+        except Exception:
+            reranker = None
 
     _init_voice_state()
     query = _render_voice_recorder(whisper_model)
@@ -208,7 +232,7 @@ def main():
         query = ""
 
     if query:
-        _render_answer(query, retriever, groq_client)
+        _render_answer(query, retriever, groq_client, reranker)
     else:
         _render_example_queries()
 
