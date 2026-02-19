@@ -7,6 +7,7 @@ from llm import get_groq_client, build_context, generate_answer
 from html_renderer import build_answer_html
 from query import expand_query
 from config import EXAMPLE_QUERIES, RETRIEVAL_TOP_K
+import voice
 
 st.set_page_config(
     page_title="RAG for Climate Challenges",
@@ -49,6 +50,12 @@ st.markdown("""
         border-color: #ccc;
     }
     .stSpinner > div { color: #666; }
+    .voice-status {
+        font-size: 12px;
+        color: #888;
+        margin-top: 2px;
+        margin-bottom: 4px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -63,15 +70,83 @@ def load_reranker_model():
     return load_reranker()
 
 
-def _render_query_input() -> str:
-    """Render the text input, pre-filled from URL param if present."""
-    default_query = st.query_params.get("q", "")
-    return st.text_input(
-        "Ask a question",
-        value=default_query,
-        placeholder="e.g. What is India's cooling action plan?",
-        label_visibility="collapsed",
-    )
+@st.cache_resource
+def load_whisper_model():
+    return voice.load_model()
+
+
+def _init_voice_state():
+    defaults = {
+        "voice_query": "",
+        "voice_status": "",
+        "show_recorder": False,
+        "just_transcribed": False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
+
+
+def _render_voice_recorder(whisper_model):
+    """Render the mic button and audio recorder. Runs transcription when audio is ready."""
+    col_input, col_mic = st.columns([11, 1])
+
+    with col_input:
+        url_query = st.query_params.get("q", "")
+        if url_query:
+            st.session_state["query_input"] = url_query
+        elif st.session_state["voice_query"]:
+            st.session_state["query_input"] = st.session_state["voice_query"]
+            st.session_state["voice_query"] = ""
+
+        query = st.text_input(
+            "Ask a question",
+            placeholder="e.g. What is India's cooling action plan?",
+            label_visibility="collapsed",
+            key="query_input",
+        )
+
+    with col_mic:
+        mic_clicked = st.button(
+            "Mic",
+            key="mic_btn",
+            help="Record a question. Supports English and Indian languages.",
+            use_container_width=True,
+            disabled=(whisper_model is None),
+        )
+
+    if mic_clicked:
+        st.session_state["show_recorder"] = not st.session_state["show_recorder"]
+
+    if st.session_state["show_recorder"]:
+        audio_value = st.audio_input(
+            "Speak your question",
+            label_visibility="collapsed",
+            key="voice_recorder",
+        )
+        if audio_value is not None:
+            with st.spinner("Transcribing..."):
+                try:
+                    audio_np = voice.decode_audio(audio_value)
+                    text, status = voice.transcribe(whisper_model, audio_np)
+                    if text:
+                        st.session_state["voice_query"] = text
+                        st.session_state["voice_status"] = status
+                    else:
+                        st.session_state["voice_status"] = "No speech detected. Please try again."
+                    st.session_state["show_recorder"] = False
+                    st.session_state["just_transcribed"] = True
+                except Exception as exc:
+                    st.session_state["voice_status"] = f"Transcription error: {exc}"
+            st.rerun()
+
+    if st.session_state["voice_status"]:
+        st.markdown(
+            f'<p class="voice-status">{st.session_state["voice_status"]}</p>',
+            unsafe_allow_html=True,
+        )
+
+    return query
 
 
 def _retrieve(query: str, retriever: HybridRetriever, groq_client, reranker) -> list:
@@ -147,7 +222,17 @@ def main():
         except Exception:
             reranker = None
 
-    query = _render_query_input()
+        try:
+            whisper_model = load_whisper_model()
+        except Exception:
+            whisper_model = None
+
+    _init_voice_state()
+    query = _render_voice_recorder(whisper_model)
+
+    if st.session_state["just_transcribed"]:
+        st.session_state["just_transcribed"] = False
+        query = ""
 
     if query:
         _render_answer(query, retriever, groq_client, reranker)

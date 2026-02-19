@@ -29,6 +29,7 @@ def ndcg_at_k(retrieved_filenames: List[str], gold_sources: List[str], k: int) -
     """
     top_k = retrieved_filenames[:k]
 
+    # DCG — deduplicate: each gold source only counted once
     dcg = 0.0
     seen_gold = set()
     for i, fn in enumerate(top_k, 1):
@@ -36,6 +37,7 @@ def ndcg_at_k(retrieved_filenames: List[str], gold_sources: List[str], k: int) -
             dcg += 1.0 / math.log2(i + 1)
             seen_gold.add(fn)
 
+    # IDCG — ideal: all unique gold sources ranked first
     num_relevant = min(len(gold_sources), k)
     idcg = sum(1.0 / math.log2(i + 1) for i in range(1, num_relevant + 1))
 

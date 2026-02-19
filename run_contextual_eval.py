@@ -198,7 +198,7 @@ def run_eval(
                 result_entry["generate_ms"] = round(gen_ms, 2)
 
             except Exception as e:
-                print(f"  ✗ LLM error: {e}")
+                print(f"  LLM error: {e}")
 
         # Track by difficulty
         if difficulty not in difficulty_buckets:
