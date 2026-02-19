@@ -68,7 +68,7 @@ def judge_generation(
                 "stream": False,
                 "options": {"temperature": 0.0, "num_predict": 200},
             },
-            timeout=300,
+            timeout=120,
         )
         response.raise_for_status()
 
