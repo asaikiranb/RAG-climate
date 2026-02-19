@@ -2,17 +2,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from retrieve import HybridRetriever
+from rerank import load_reranker, rerank
 from llm import get_groq_client, build_context, generate_answer
 from html_renderer import build_answer_html
-from config import EXAMPLE_QUERIES
+from query import expand_query
+from config import EXAMPLE_QUERIES, RETRIEVAL_TOP_K
 
-# No sidebar
 st.set_page_config(
     page_title="RAG for Climate Challenges",
     layout="centered",
     initial_sidebar_state="collapsed"
 )
-
 
 st.markdown("""
 <style>
@@ -58,17 +58,81 @@ def load_retriever():
     return HybridRetriever()
 
 
+@st.cache_resource
+def load_reranker_model():
+    return load_reranker()
+
+
+def _render_query_input() -> str:
+    """Render the text input, pre-filled from URL param if present."""
+    default_query = st.query_params.get("q", "")
+    return st.text_input(
+        "Ask a question",
+        value=default_query,
+        placeholder="e.g. What is India's cooling action plan?",
+        label_visibility="collapsed",
+    )
+
+
+def _retrieve(query: str, retriever: HybridRetriever, groq_client, reranker) -> list:
+    """Expand query, run hybrid search on all variants, rerank merged pool, return top results."""
+    queries = expand_query(query, groq_client)
+
+    seen_ids = set()
+    candidates = []
+    for q in queries:
+        for result in retriever.hybrid_search(q, reranker=reranker):
+            if result["id"] not in seen_ids:
+                seen_ids.add(result["id"])
+                candidates.append(result)
+
+    return rerank(query, candidates, reranker)[:RETRIEVAL_TOP_K]
+
+
+def _render_answer(query: str, retriever: HybridRetriever, groq_client, reranker):
+    """Run the full pipeline and render the answer with source cards."""
+    with st.spinner("Searching..."):
+        try:
+            results = _retrieve(query, retriever, groq_client, reranker)
+        except Exception as e:
+            st.error(f"Search error: {str(e)}")
+            st.stop()
+
+        if not results:
+            st.info("No relevant documents found. Try a different query.")
+            st.stop()
+
+        context = build_context(results)
+        answer = generate_answer(query, context, groq_client)
+
+    answer_html = build_answer_html(answer, results)
+    answer_lines = answer.count("\n") + 1
+    estimated_height = 350 + (answer_lines * 22) + (len(results) * 55)
+    estimated_height = min(max(estimated_height, 450), 1800)
+    components.html(answer_html, height=estimated_height, scrolling=True)
+
+
+def _render_example_queries():
+    """Show example query buttons when the input is idle."""
+    st.markdown("")
+    st.markdown("##### Try asking")
+    cols = st.columns(2)
+    for idx, example in enumerate(EXAMPLE_QUERIES):
+        with cols[idx % 2]:
+            if st.button(example, key=f"ex_{idx}", use_container_width=True):
+                st.query_params.update({"q": example})
+                st.rerun()
+
+
 def main():
     st.title("Retrieval Augmented Generation for Climate Challenges")
     st.caption("Search across your document collection")
-
 
     try:
         groq_client = get_groq_client()
     except ValueError as e:
         st.error(str(e))
         st.stop()
-
 
     try:
         with st.spinner("Loading document index..."):
@@ -77,51 +141,18 @@ def main():
         st.error(f"Error connecting to ChromaDB: {str(e)}")
         st.stop()
 
-    default_query = st.query_params.get("q", "")
+    with st.spinner("Loading models..."):
+        try:
+            reranker = load_reranker_model()
+        except Exception:
+            reranker = None
 
-
-    query = st.text_input(
-        "Ask a question",
-        value=default_query,
-        placeholder="e.g. What is India's cooling action plan?",
-        label_visibility="collapsed"
-    )
+    query = _render_query_input()
 
     if query:
-        with st.spinner("Searching..."):
-            try:
-                results = retriever.hybrid_search(query=query, top_k=5, brand_filter=None)
-            except Exception as e:
-                st.error(f"Search error: {str(e)}")
-                st.stop()
-
-            if not results:
-                st.info("No relevant documents found. Try a different query.")
-                st.stop()
-
-            context = build_context(results)
-            answer = generate_answer(query, context, groq_client)
-
-
-        answer_html = build_answer_html(answer, results)
-
-        answer_lines = answer.count('\n') + 1
-        estimated_height = 350 + (answer_lines * 22) + (len(results) * 55)
-        estimated_height = min(max(estimated_height, 450), 1800)
-
-        components.html(answer_html, height=estimated_height, scrolling=True)
-
-    # Show example queries when idle
-    if not query:
-        st.markdown("")
-        st.markdown("##### Try asking")
-
-        cols = st.columns(2)
-        for idx, example in enumerate(EXAMPLE_QUERIES):
-            with cols[idx % 2]:
-                if st.button(example, key=f"ex_{idx}", use_container_width=True):
-                    st.query_params.update({"q": example})
-                    st.rerun()
+        _render_answer(query, retriever, groq_client, reranker)
+    else:
+        _render_example_queries()
 
 
 if __name__ == "__main__":
