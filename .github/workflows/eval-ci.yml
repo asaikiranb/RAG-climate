@@ -43,8 +43,7 @@ jobs:
       # ---- Run Eval ----
       - name: Run comprehensive evaluation
         env:
-          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
-          CHROMA_COLLECTION_NAME: ${{ secrets.CHROMA_COLLECTION_NAME }}
+          CHROMA_COLLECTION_NAME: hvac_documents
           TOKENIZERS_PARALLELISM: "false"
         run: |
           python run_contextual_eval.py \
