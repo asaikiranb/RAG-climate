@@ -22,11 +22,11 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
-          pip install requests
+          pip install -r eval/requirements.txt
 
       # ---- Ollama ----
       - name: Install Ollama
@@ -37,12 +37,14 @@ jobs:
         run: |
           ollama serve &
           sleep 5
-          ollama pull llama3.2
-          echo "Ollama ready with llama3.2"
+          ollama pull llama3.2:latest
+          echo "Ollama ready"
 
       # ---- Run Eval ----
       - name: Run comprehensive evaluation
         env:
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CHROMA_COLLECTION_NAME: ${{ secrets.CHROMA_COLLECTION_NAME }}
           TOKENIZERS_PARALLELISM: "false"
         run: |
           python run_contextual_eval.py \
@@ -50,7 +52,7 @@ jobs:
             2>&1 | tee eval_output.log
           echo "Eval complete"
 
-      # ---- Upload JSON artifact ----
+      # ---- Upload artifacts ----
       - name: Upload eval results
         uses: actions/upload-artifact@v4
         if: always()
