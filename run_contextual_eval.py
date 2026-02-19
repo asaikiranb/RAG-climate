@@ -87,6 +87,74 @@ def percentile_stats(values: List[float]) -> Dict:
     }
 
 
+def _write_results(
+    output_path, results_log, all_retrieval_metrics, all_generation_metrics,
+    citation_scores, latency_embed, latency_search, latency_rerank,
+    latency_generate, difficulty_buckets, top_k, retrieval_only,
+    use_reranker, total, partial=False,
+):
+    """Write current results to disk. Called after every question (partial=True) and at the end."""
+    if not all_retrieval_metrics:
+        return
+
+    agg_retrieval = {}
+    for k in K_VALUES:
+        for metric in ["recall", "mrr", "ndcg"]:
+            key = f"{metric}@{k}"
+            vals = [m[key] for m in all_retrieval_metrics]
+            agg_retrieval[key] = round(float(np.mean(vals)), 4)
+
+    agg_generation = {}
+    if all_generation_metrics:
+        for key in ["faithfulness", "relevance", "completeness", "overall"]:
+            vals = [m[key] for m in all_generation_metrics]
+            agg_generation[key] = round(float(np.mean(vals)), 4)
+
+    agg_citation = {}
+    if citation_scores["validity"]:
+        for key in ["validity", "coverage", "grounding"]:
+            agg_citation[f"citation_{key}"] = round(float(np.mean(citation_scores[key])), 4)
+
+    latency_summary = {}
+    for name, values in [
+        ("embed_ms", latency_embed), ("search_ms", latency_search),
+        ("rerank_ms", latency_rerank), ("generate_ms", latency_generate),
+    ]:
+        latency_summary[name] = percentile_stats(values)
+
+    difficulty_summary = {}
+    for diff, data in sorted(difficulty_buckets.items()):
+        n = data["count"]
+        r5 = round(float(np.mean([m["recall@5"] for m in data["retrieval"]])), 4)
+        mrr5 = round(float(np.mean([m["mrr@5"] for m in data["retrieval"]])), 4)
+        ndcg5 = round(float(np.mean([m["ndcg@5"] for m in data["retrieval"]])), 4)
+        faith = round(float(np.mean([m["faithfulness"] for m in data["generation"]])), 4) if data["generation"] else 0.0
+        difficulty_summary[diff] = {"count": n, "recall@5": r5, "mrr@5": mrr5, "ndcg@5": ndcg5, "faithfulness": faith}
+
+    output = {
+        "timestamp": datetime.now().isoformat(),
+        "partial": partial,
+        "questions_completed": len(results_log),
+        "config": {
+            "top_k": top_k,
+            "retrieval_only": retrieval_only,
+            "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2" if use_reranker else "none",
+            "answer_model": "ollama/llama3.2",
+            "judge_model": "ollama/llama3.2",
+            "total_questions": total,
+        },
+        "retrieval_metrics": agg_retrieval,
+        "generation_metrics": agg_generation,
+        "citation_metrics": agg_citation,
+        "latency_summary": latency_summary,
+        "difficulty_breakdown": difficulty_summary,
+        "per_question": results_log,
+    }
+
+    with open(output_path, "w") as f:
+        json.dump(output, f, indent=2)
+
+
 def run_eval(
     dataset_path: str,
     output_path: str,
@@ -212,97 +280,62 @@ def run_eval(
 
         results_log.append(result_entry)
 
-    # ==================== Aggregate ====================
+        # Checkpoint: flush partial results after every question so a timeout
+        # doesn't lose everything. The final save at the end overwrites this.
+        _write_results(
+            output_path, results_log, all_retrieval_metrics, all_generation_metrics,
+            citation_scores, latency_embed, latency_search, latency_rerank,
+            latency_generate, difficulty_buckets, top_k, retrieval_only,
+            use_reranker, total, partial=True,
+        )
+
+    # ==================== Final save + print ====================
+    _write_results(
+        output_path, results_log, all_retrieval_metrics, all_generation_metrics,
+        citation_scores, latency_embed, latency_search, latency_rerank,
+        latency_generate, difficulty_buckets, top_k, retrieval_only,
+        use_reranker, total, partial=False,
+    )
+
+    # Read back the saved file for console summary
+    with open(output_path) as f:
+        saved = json.load(f)
+
     print("\n" + "=" * 70)
     print("  RESULTS")
     print("=" * 70)
-    print(f"\n  Questions evaluated: {len(results_log)}/{total}")
+    print(f"\n  Questions evaluated: {saved['questions_completed']}/{total}")
     print(f"  Top-K: {top_k}")
     print(f"  Reranker: {'cross-encoder/ms-marco-MiniLM-L-6-v2' if use_reranker else 'disabled'}")
 
-    # Retrieval
     print("\n  RETRIEVAL METRICS:")
-    agg_retrieval = {}
     for k in K_VALUES:
-        for metric in ["recall", "mrr", "ndcg"]:
-            key = f"{metric}@{k}"
-            vals = [m[key] for m in all_retrieval_metrics]
-            agg_retrieval[key] = round(float(np.mean(vals)), 4)
+        r = saved["retrieval_metrics"]
+        print(f"    k={k}:  recall={r[f'recall@{k}']:.4f}  mrr={r[f'mrr@{k}']:.4f}  ndcg={r[f'ndcg@{k}']:.4f}")
 
-    for k in K_VALUES:
-        print(f"    k={k}:  recall={agg_retrieval[f'recall@{k}']:.4f}  mrr={agg_retrieval[f'mrr@{k}']:.4f}  ndcg={agg_retrieval[f'ndcg@{k}']:.4f}")
-
-    # Generation
-    agg_generation = {}
-    if all_generation_metrics:
+    if saved["generation_metrics"]:
         print("\n  GENERATION METRICS:")
-        for key in ["faithfulness", "relevance", "completeness", "overall"]:
-            vals = [m[key] for m in all_generation_metrics]
-            agg_generation[key] = round(float(np.mean(vals)), 4)
-            print(f"    {key:20s}{agg_generation[key]:.4f}")
+        for key, val in saved["generation_metrics"].items():
+            print(f"    {key:20s}{val:.4f}")
     else:
         print("\n  GENERATION METRICS: (skipped)")
 
-    # Citation
-    agg_citation = {}
-    if citation_scores["validity"]:
+    if saved["citation_metrics"]:
         print("\n  CITATION METRICS:")
-        for key in ["validity", "coverage", "grounding"]:
-            agg_citation[f"citation_{key}"] = round(float(np.mean(citation_scores[key])), 4)
-            print(f"    citation_{key}: {agg_citation[f'citation_{key}']:.4f}")
+        for key, val in saved["citation_metrics"].items():
+            print(f"    {key}: {val:.4f}")
     else:
         print("\n  CITATION METRICS: (skipped)")
 
-    # Latency
     print("\n  LATENCY SUMMARY:")
-    latency_summary = {}
-    for name, values in [
-        ("embed_ms", latency_embed),
-        ("search_ms", latency_search),
-        ("rerank_ms", latency_rerank),
-        ("generate_ms", latency_generate),
-    ]:
-        stats = percentile_stats(values)
-        latency_summary[name] = stats
+    for name, stats in saved["latency_summary"].items():
         print(f"    {name:20s}mean={stats['mean']:8.1f}ms  p50={stats['p50']:8.1f}ms  p95={stats['p95']:8.1f}ms  min={stats['min']:8.1f}ms  max={stats['max']:8.1f}ms")
 
-    # By difficulty
     print("\n  BY DIFFICULTY:")
-    difficulty_summary = {}
-    for diff, data in sorted(difficulty_buckets.items()):
-        n = data["count"]
-        r5 = round(float(np.mean([m["recall@5"] for m in data["retrieval"]])), 4)
-        mrr5 = round(float(np.mean([m["mrr@5"] for m in data["retrieval"]])), 4)
-        ndcg5 = round(float(np.mean([m["ndcg@5"] for m in data["retrieval"]])), 4)
-        faith = round(float(np.mean([m["faithfulness"] for m in data["generation"]])), 4) if data["generation"] else 0.0
-        difficulty_summary[diff] = {
-            "count": n, "recall@5": r5, "mrr@5": mrr5, "ndcg@5": ndcg5, "faithfulness": faith,
-        }
-        print(f"    {diff:10s} n={n:3d}  recall@5={r5:.4f}  mrr@5={mrr5:.4f}  ndcg@5={ndcg5:.4f}  faith={faith:.4f}")
+    for diff, data in sorted(saved["difficulty_breakdown"].items()):
+        print(f"    {diff:10s} n={data['count']:3d}  recall@5={data['recall@5']:.4f}  mrr@5={data['mrr@5']:.4f}  ndcg@5={data['ndcg@5']:.4f}  faith={data['faithfulness']:.4f}")
 
     print("\n" + "=" * 70)
-
-    # Save
-    output = {
-        "timestamp": datetime.now().isoformat(),
-        "config": {
-            "top_k": top_k,
-            "retrieval_only": retrieval_only,
-            "reranker": "cross-encoder/ms-marco-MiniLM-L-6-v2" if use_reranker else "none",
-            "answer_model": "ollama/llama3.2",
-            "judge_model": "ollama/llama3.2",
-            "total_questions": total,
-        },
-        "retrieval_metrics": agg_retrieval,
-        "generation_metrics": agg_generation,
-        "citation_metrics": agg_citation,
-        "latency_summary": latency_summary,
-        "difficulty_breakdown": difficulty_summary,
-        "per_question": results_log,
-    }
-
-    with open(output_path, "w") as f:
-        json.dump(output, f, indent=2)
     print(f"\n  Results saved to: {output_path}")
 
 
