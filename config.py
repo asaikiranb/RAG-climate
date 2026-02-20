@@ -8,7 +8,7 @@ LLM_TOP_P = 0.9
 
 # Retrieval
 RETRIEVAL_TOP_K = 5
-RETRIEVAL_CANDIDATE_K = 20  # candidates fetched before reranking
+RETRIEVAL_CANDIDATE_K = 40  # candidates fetched before reranking (wider pool for bge-reranker-base)
 
 # System prompt
 SYSTEM_PROMPT = """You are a research assistant. Answer the question using ONLY information explicitly stated in the provided sources.

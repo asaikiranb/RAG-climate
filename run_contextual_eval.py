@@ -135,11 +135,12 @@ def _write_results(
     difficulty_summary = {}
     for diff, data in sorted(difficulty_buckets.items()):
         n = data["count"]
+        r1 = round(float(np.mean([m["recall@1"] for m in data["retrieval"]])), 4)
         r5 = round(float(np.mean([m["recall@5"] for m in data["retrieval"]])), 4)
         mrr5 = round(float(np.mean([m["mrr@5"] for m in data["retrieval"]])), 4)
         ndcg5 = round(float(np.mean([m["ndcg@5"] for m in data["retrieval"]])), 4)
         faith = round(float(np.mean([m["faithfulness"] for m in data["generation"]])), 4) if data["generation"] else 0.0
-        difficulty_summary[diff] = {"count": n, "recall@5": r5, "mrr@5": mrr5, "ndcg@5": ndcg5, "faithfulness": faith}
+        difficulty_summary[diff] = {"count": n, "recall@1": r1, "recall@5": r5, "mrr@5": mrr5, "ndcg@5": ndcg5, "faithfulness": faith}
 
     output = {
         "timestamp": datetime.now().isoformat(),
