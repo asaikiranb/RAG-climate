@@ -1,5 +1,6 @@
 """Cross-encoder reranker for scoring query-document pairs."""
 
+import os
 from typing import List, Dict
 from sentence_transformers import CrossEncoder
 
@@ -9,7 +10,7 @@ RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
 def load_reranker() -> CrossEncoder:
     """Load and return the cross-encoder model."""
-    return CrossEncoder(RERANKER_MODEL)
+    return CrossEncoder(RERANKER_MODEL, token=os.environ.get("HF_TOKEN"))
 
 
 def rerank(query: str, results: List[Dict], model: CrossEncoder) -> List[Dict]:

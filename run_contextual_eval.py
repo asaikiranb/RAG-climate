@@ -15,9 +15,19 @@ Usage:
     python run_contextual_eval.py --output results.json  # custom output path
 """
 
-import json
 import os
 import sys
+
+# When HF_TOKEN is not set, force HuggingFace libs to use the local cache only.
+# Without this, AutoTokenizer / AutoConfig calls to HF Hub can hang indefinitely
+# on unauthenticated rate limits (silent infinite stall, not a fast failure).
+# CI always sets HF_TOKEN, so it stays in online mode and can download models fresh.
+if not os.environ.get("HF_TOKEN"):
+    os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+    os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+    os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+import json
 import argparse
 import time
 import requests

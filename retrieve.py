@@ -17,7 +17,9 @@ load_dotenv()
 
 class HybridRetriever:
     def __init__(self):
-        self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        self.embedding_model = SentenceTransformer(
+            "all-MiniLM-L6-v2", token=os.environ.get("HF_TOKEN")
+        )
 
         chroma_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chroma_db")
         self.chroma_client = chromadb.PersistentClient(path=chroma_path)
