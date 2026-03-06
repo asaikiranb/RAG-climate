@@ -1,11 +1,11 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-import pipeline as rag_pipeline
 from retrieve import HybridRetriever
 from rerank import CrossEncoderReranker
 from llm import GenerationClient
 from html_renderer import build_answer_html
+from query import expand_query
 from config import EXAMPLE_QUERIES
 try:
     import voice
@@ -164,18 +164,37 @@ def _render_voice_recorder(whisper_model):
     return query
 
 
+def _retrieve(query: str, retriever: HybridRetriever, reranker: CrossEncoderReranker, generator: GenerationClient) -> list:
+    """Expansion, search, and reranking pipeline."""
+    queries = expand_query(query, generator.groq)
+
+    seen_ids = set()
+    candidates = []
+    for q in queries:
+        for result in retriever.search(q):
+            if result["id"] not in seen_ids:
+                seen_ids.add(result["id"])
+                candidates.append(result)
+
+    return reranker.rerank(query, candidates)
+
+
 def _render_answer(query: str, retriever: HybridRetriever, reranker: CrossEncoderReranker, generator: GenerationClient):
     """Execute the full RAG pipeline and render the result."""
     with st.spinner("Searching..."):
         try:
-            answer, top_results = rag_pipeline.answer(query)
+            results = _retrieve(query, retriever, reranker, generator)
         except Exception as e:
             st.error(f"Search error: {str(e)}")
             st.stop()
 
-        if not top_results:
+        if not results:
             st.info("No relevant documents found. Try a different query.")
             st.stop()
+
+        # Selection of top 5 for generation
+        top_results = results[:5]
+        answer = generator.generate(query, top_results)
 
     answer_html = build_answer_html(answer, top_results)
     answer_lines = answer.count("\n") + 1
