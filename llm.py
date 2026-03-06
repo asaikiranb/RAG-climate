@@ -47,7 +47,36 @@ class GenerationClient:
                 print(f"Groq API error: {e}")
                 if not use_fallback: return f"Error: {e}"
 
-        return self._generate_ollama(prompt)
+        fallback_answer = self._generate_ollama(prompt)
+        if fallback_answer.startswith("Service unavailable:"):
+            return self._deterministic_fallback(query, hits, fallback_answer)
+        return fallback_answer
+
+    def _deterministic_fallback(self, query: str, hits: list, error_message: str) -> str:
+        """Graceful fallback that keeps source-grounded citations even if LLM providers fail."""
+        if not hits:
+            return (
+                "I could not generate a model response right now, and there are no retrieved sources "
+                "to answer this safely. Please retry."
+            )
+
+        lines = [
+            "Model generation is temporarily unavailable; using source-grounded fallback.",
+            "",
+            "Most relevant evidence:",
+        ]
+
+        for idx, hit in enumerate(hits[:3], start=1):
+            meta = hit.get("metadata", {})
+            snippet = hit.get("document", "").replace("\n", " ").strip()
+            snippet = " ".join(snippet.split())[:180]
+            filename = meta.get("filename", "unknown")
+            page = meta.get("page_number", "?")
+            lines.append(f"- [{idx}] {filename} (p.{page}): {snippet}")
+
+        lines.append("")
+        lines.append("Please retry shortly for a full synthesized answer. [1]")
+        return "\n".join(lines)
 
     def _generate_ollama(self, prompt: str) -> str:
         """Fallback to local Ollama if Groq fails or is unavailable."""

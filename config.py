@@ -13,8 +13,8 @@ LLM_TOP_P = 0.9
 
 # Retrieval Constants
 RETRIEVAL_TOP_K = 5
-RETRIEVAL_CANDIDATE_K = 120   # larger pool → better top-N for reranker (minimal extra latency)
-RERANK_POOL_SIZE = 40   # rerank more candidates → better recall@1 (~33% more CE latency vs 30)
+RETRIEVAL_CANDIDATE_K = 150
+RERANK_POOL_SIZE = 50
 
 # Database Config
 CHROMA_PATH = "./chroma_db"
@@ -29,10 +29,10 @@ RERANKER_MODEL = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-
 # Retrieval Weighting
 RETRIEVER_WEIGHT = 0.45   # higher = trust retriever rank more in final fusion (helps recall@1)
 RERANKER_WEIGHT = 0.55
-RRF_K = 20   # lower = stronger emphasis on top ranks
+RRF_K = 16
 # Optional: weight vector vs BM25 in hybrid retriever (default 1.0/1.0 = unchanged)
-VECTOR_WEIGHT = 1.0
-BM25_WEIGHT = 1.0
+VECTOR_WEIGHT = 1.15
+BM25_WEIGHT = 0.85
 
 # Reranker: diversify top-k by document (one chunk per file when possible). Can help recall@5, may hurt recall@1.
 USE_DIVERSITY_TOP_K = False
@@ -51,6 +51,7 @@ Operational Rules:
    - Use bullet points (- ) for safety notes, multiple items, or comparisons.
    - Use a concise paragraph for single-topic explanations or yes/no answers.
 5. Keep the response focused and under 150 words.
+6. Every factual sentence must include at least one source citation like [N].
 
 Sources:
 {context}

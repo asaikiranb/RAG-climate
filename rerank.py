@@ -1,7 +1,9 @@
 """Cross-Encoder reranking module; model is configurable via config.RERANKER_MODEL."""
 
 import os
+from pathlib import Path
 from typing import List, Dict
+
 from sentence_transformers import CrossEncoder
 
 from config import RERANK_POOL_SIZE, RERANKER_WEIGHT, RETRIEVER_WEIGHT, RRF_K, RERANKER_MODEL
@@ -11,8 +13,37 @@ class CrossEncoderReranker:
     """Reranks retrieved candidates using a Cross-Encoder and weighted Rank-Based Fusion."""
 
     def __init__(self, model_name: str = None):
-        self.model_name = model_name or RERANKER_MODEL
+        self.model_name = self._resolve_model_name(model_name or RERANKER_MODEL)
         self.model = CrossEncoder(self.model_name)
+
+    def _resolve_model_name(self, default_name: str) -> str:
+        parts = default_name.split("/")
+        if len(parts) != 2:
+            return default_name
+
+        org, model = parts
+        candidates = []
+        hf_home = os.getenv("HF_HOME", "").strip()
+        if hf_home:
+            candidates.append(Path(hf_home))
+        xdg_cache = os.getenv("XDG_CACHE_HOME", "").strip()
+        if xdg_cache:
+            candidates.append(Path(xdg_cache) / "huggingface")
+        candidates.append(Path(__file__).resolve().parents[2] / ".runtime-cache" / "xdg" / "huggingface")
+
+        for root in candidates:
+            try:
+                model_root = root / "hub" / f"models--{org}--{model}"
+                ref_path = model_root / "refs" / "main"
+                if not ref_path.exists():
+                    continue
+                revision = ref_path.read_text(encoding="utf-8").strip()
+                snapshot_path = model_root / "snapshots" / revision
+                if (snapshot_path / "config.json").exists():
+                    return str(snapshot_path)
+            except Exception:
+                continue
+        return default_name
 
     def rerank(self, query: str, candidates: List[Dict]) -> List[Dict]:
         """Optimize candidate ranking using a cross-encoder."""

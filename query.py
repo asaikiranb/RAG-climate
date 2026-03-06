@@ -1,32 +1,70 @@
-"""Query expansion module used to improve retrieval recall via semantic variations."""
+"""Adaptive query expansion for version 3 experiments."""
 
+import re
 from typing import List
+
 from groq import Groq
 
 from config import LLM_MODEL
 
-EXPANSION_PROMPT = """Generate 2 alternative phrasings of the following question.
-The alternatives should use different vocabulary but ask the same thing.
-Return only the 2 alternatives, one per line, no numbering, no explanation.
 
-Question: {query}"""
+def _detect_intent(query: str) -> str:
+    q = query.lower()
+    troubleshooting_terms = ["error", "fault", "not working", "leak", "failure", "troubleshoot"]
+    compliance_terms = ["code", "regulation", "compliance", "ashrae", "iec", "standard"]
+    procedure_terms = ["steps", "procedure", "install", "commission", "how to"]
+
+    if any(term in q for term in troubleshooting_terms):
+        return "troubleshooting"
+    if any(term in q for term in compliance_terms):
+        return "compliance"
+    if any(term in q for term in procedure_terms):
+        return "procedure"
+    return "fact"
+
+
+def _target_count(intent: str) -> int:
+    if intent == "fact":
+        return 2
+    return 3
+
+
+def _sanitize_line(line: str) -> str:
+    return re.sub(r"^\s*[-\d\.\)]\s*", "", line).strip()
 
 
 def expand_query(query: str, groq_client: Groq) -> List[str]:
-    """Generates alternative phrasings of the input query to broaden retrieval scope.
-    
-    Returns a list containing the original query and up to two alternatives.
-    """
+    if groq_client is None:
+        return [query]
+
+    intent = _detect_intent(query)
+    count = _target_count(intent)
+    expansion_prompt = f"""You are expanding an HVAC retrieval query.
+Intent class: {intent}
+Generate {count} alternatives that keep the same intent and constraints.
+
+Rules:
+- preserve model/part numbers and all units
+- keep the query domain as HVAC technical support
+- each output line must be a standalone search query
+- no numbering, no explanation
+
+Question: {query}
+"""
+
     try:
         response = groq_client.chat.completions.create(
-            messages=[{"role": "user", "content": EXPANSION_PROMPT.format(query=query)}],
+            messages=[{"role": "user", "content": expansion_prompt}],
             model=LLM_MODEL,
-            temperature=0.5,
-            max_tokens=150,
+            temperature=0.25,
+            max_tokens=220,
         )
         raw = response.choices[0].message.content.strip()
-        alternatives = [line.strip() for line in raw.splitlines() if line.strip()][:2]
-        return [query] + alternatives
-
+        variants = [query]
+        for line in raw.splitlines():
+            clean = _sanitize_line(line)
+            if clean and clean.lower() != query.lower() and clean not in variants:
+                variants.append(clean)
+        return variants[: count + 1]
     except Exception:
         return [query]
