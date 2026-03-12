@@ -61,6 +61,12 @@ st.markdown("""
         background: #f0f0f0;
         border-color: #ccc;
     }
+    [data-testid="stFormSubmitButton"] > button {
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        background: #fafafa;
+        color: #333;
+    }
     .stSpinner > div { color: #666; }
     .voice-status {
         font-size: 12px;
@@ -132,36 +138,32 @@ def _init_voice_state():
 
 
 def _render_voice_recorder(whisper_model):
-    """Render the mic button and audio recorder."""
+    """Render the search input, Search button, and mic recorder."""
     url_query = st.query_params.get("q", "")
-    query_from_voice = None
     if url_query:
         st.session_state["query_input"] = url_query
         st.query_params.clear()
     elif st.session_state["voice_query"]:
-        query_from_voice = st.session_state["voice_query"]
-        st.session_state["query_input"] = query_from_voice
+        st.session_state["query_input"] = st.session_state["voice_query"]
         st.session_state["voice_query"] = ""
 
-    col_form, col_mic = st.columns([11, 1])
-    with col_form:
-        with st.form("query_form", clear_on_submit=False):
+    with st.form("query_form", clear_on_submit=False):
+        col_input, col_mic, col_search = st.columns([7, 2, 2])
+        with col_input:
             query = st.text_input(
                 "Ask a question",
                 placeholder="e.g. What is India's cooling action plan?",
                 label_visibility="collapsed",
                 key="query_input",
             )
+        with col_mic:
+            mic_clicked = st.form_submit_button(
+                "Mic",
+                help="Record a question. Supports English and Indian languages.",
+                disabled=(whisper_model is None),
+            )
+        with col_search:
             form_submitted = st.form_submit_button("Search")
-
-    with col_mic:
-        mic_clicked = st.button(
-            "Mic",
-            key="mic_btn",
-            help="Record a question. Supports English and Indian languages.",
-            use_container_width=True,
-            disabled=(whisper_model is None),
-        )
 
     if mic_clicked:
         st.session_state["show_recorder"] = not st.session_state["show_recorder"]
@@ -194,9 +196,7 @@ def _render_voice_recorder(whisper_model):
             unsafe_allow_html=True,
         )
 
-    if query_from_voice is not None and not form_submitted:
-        return query_from_voice
-    return query
+    return query if form_submitted else ""
 
 
 def _retrieve(query: str, retriever: HybridRetrieverV2, reranker: TwoStageCalibratedReranker, generator: GenerationClient) -> list:
