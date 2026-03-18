@@ -127,9 +127,9 @@ SYSTEM_MESSAGE = "Senior HVAC technical specialist. Cite sources accurately."
 
 # UI Examples
 EXAMPLE_QUERIES = [
-    "How to handle a refrigerant leak?",
-    "What are hydrocarbon safety measures?",
-    "Steps for vacuum testing a system?",
-    "India's Montreal Protocol achievements?",
-    "Standard procedure for AC installation?"
+    "When recovering R-22 from a split AC, what is the correct recovery procedure and can any amount be legally vented?",
+    "For a system converted from R-22 to R-407C, what oil change and retrofit steps are required (mineral → POE) before charging?",
+    "What vacuum level (microns) should I pull for a residential split AC, how long should the decay test hold, and what rise indicates a leak?",
+    "What are the required brazing and nitrogen purge practices to prevent copper oxide scale, and how do I verify the system is clean before commissioning?",
+    "How do I size and set the suction/liquid line and insulation for a 1.5–2 ton split AC, and what symptoms indicate under/overcharge in the field?"
 ]
